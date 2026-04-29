@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>ClinStrata.QC.Engine</AssemblyName>
+    <RootNamespace>ClinStrata.QC.Engine</RootNamespace>
+    <Version>1.0.0</Version>
+    <Authors>Jimmy O. Folagbayi</Authors>
+    <Description>Open-source, CLSI EP23-aligned Westgard multi-rule QC engine and sigma metric calculator for clinical laboratory informatics.</Description>
+    <PackageTags>clinical-laboratory;quality-control;westgard;clsi;ep23;sigma-metrics;lims;clinstrata</PackageTags>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/[PLACEHOLDER]/clinstrata-qc-engine</RepositoryUrl>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+</Project>
