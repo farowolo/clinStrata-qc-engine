@@ -1,6 +1,6 @@
 # ClinStrata QC Engine
 
-**An open-source, CLSI EP23-aligned Westgard multi-rule QC engine and sigma metric calculator for clinical laboratory informatics.**
+**An open-source, CLSI EP23-aligned Westgard multi-rule QC engine and 2025 CLIA PT-based sigma metric calculator for clinical laboratory informatics.**
 
 Built by a clinical laboratory scientist for clinical laboratory scientists. No Excel. No black boxes. Fully auditable rule logic you can document to CAP and CLIA.
 
@@ -18,7 +18,7 @@ Every CLIA-regulated laboratory implementing Westgard multi-rule QC is rebuildin
 - **Instrument manufacturer software** — instrument-specific and cannot aggregate QC performance across platforms
 - **Cloud-hosted QC management platforms** — peer group models assume commercial reagent lots with established interlaboratory populations; limited applicability to LC-MS/MS LDTs where no peer group exists and TEa must be defined independently
 
-This library fills that gap: a clean, stateless, independently testable C#/.NET implementation of the six standard Westgard rules and the CLSI EP23-A sigma metric framework. Integrate it into your informatics system and it handles the math — transparently, auditably, and portably.
+This library fills that gap: a clean, stateless, independently testable C#/.NET implementation of the six standard Westgard rules and the CLSI EP23-A sigma metric framework, backed by the full 2025 CLIA PT acceptance criteria database. Integrate it into your informatics system and it handles the math — transparently, auditably, and portably.
 
 ---
 
@@ -48,33 +48,40 @@ The 1-2s warning sets a flag but does not gate rejection rule evaluation — all
 | 3–<4 | Full multi-rule, N=4 |
 | < 3 | Method review required |
 
-TEa defaults to CLIA PT acceptance criteria. Custom TEa is fully supported for LDTs and esoteric assays where CLIA PT criteria do not exist or are not clinically appropriate — especially relevant for LC-MS/MS-based therapeutic drug monitoring analytes.
+### 2025 CLIA PT acceptance criteria database
+
+87 analytes across Chemistry, Immunology, Endocrinology, Toxicology, and Hematology, sourced from 42 CFR Part 493 (CMS-3355-F Final Rule, effective July 11, 2024, implemented January 1, 2025).
+
+Three criterion types are supported:
+
+- **Simple** — TV ± X% (e.g., Albumin ±8%, HbA1c ±8%, Triglycerides ±15%)
+- **Composite** — TV ± X% or ± Y units, whichever is greater (e.g., Glucose: ±8% or ±6 mg/dL; Creatinine: ±10% or ±0.2 mg/dL; TSH: ±20% or ±0.2 mIU/L). TEa% is **concentration-dependent** for composite criteria — pass the QC material mean for correct calculation.
+- **Absolute** — TV ± X units only (e.g., Potassium: ±0.3 mmol/L; Sodium: ±4 mmol/L; Blood gas pH: ±0.04). Requires QC mean for TEa% conversion.
+
+For analytes without CLIA PT criteria — immunosuppressants, antifungal TDM, NGAL, 25-OH Vitamin D, and other LDTs — supply `teaPct` based on clinical decision limits or biological variation data.
 
 ### Levey-Jennings output
 
-Structured data objects containing: mean, ±1s/2s/3s control limits, per-observation values with run identifiers, and violation flags with rule attribution. Chart rendering is delegated to the consuming system's presentation layer, enabling integration across web, desktop, and report-generation contexts without modifying the validated engine core.
+Structured data objects: mean, ±1s/2s/3s control limits, per-observation violation flags with rule attribution. Chart rendering is delegated to the consuming system's presentation layer.
 
 ---
 
 ## Quick start
 
-### Run evaluation
+### Run QC evaluation
 
 ```csharp
 using ClinStrata.QC.Engine.Engine;
 using ClinStrata.QC.Engine.Models;
 
-// Define control limits from your established mean and SD
 var limits = new QcControlLimits { Mean = 100.0, Sd = 5.0 };
 
-// Build your observations for the run
 var observations = new List<QcObservation>
 {
     new(Value: 111.0, RunId: "RUN-001"),
     new(Value: 111.5, RunId: "RUN-001")
 };
 
-// Evaluate
 var engine = new WestgardEngine();
 var result = engine.Evaluate(observations, limits);
 
@@ -87,57 +94,124 @@ if (!result.IsAccepted)
 }
 
 if (result.WarningTriggered && result.IsAccepted)
-{
     Console.WriteLine("1-2s warning — monitor closely but run is accepted.");
-}
 ```
 
-### Calculate sigma metric
+### Calculate sigma — simple criterion (percentage only)
 
 ```csharp
 var calc = new SigmaCalculator();
 
-// CLIA PT default TEa for cyclosporine (25%)
-var sigma = calc.Calculate(biasPct: 3.0, cvPct: 4.5, analyte: "cyclosporine");
-Console.WriteLine($"σ = {sigma.Sigma}");
-Console.WriteLine(sigma.RecommendationDescription);
+// Albumin — 2025 CLIA ±8% (simple criterion, no qcMean needed)
+var sigma = calc.Calculate(biasPct: 1.5, cvPct: 2.0, analyte: "albumin");
+Console.WriteLine($"σ = {sigma.Sigma}");               // σ = 3.25
+Console.WriteLine(sigma.RecommendationDescription);    // Full multi-rule, N=4
+Console.WriteLine(sigma.Criteria!.Description);        // TV ±8%
+```
 
-// Custom TEa for voriconazole LDT (no CLIA PT criteria exist)
+### Calculate sigma — composite criterion (concentration-dependent TEa)
+
+```csharp
+// Glucose — 2025 CLIA ±8% or ±6 mg/dL (greater)
+// Always pass qcMean for composite criteria — TEa% varies by concentration
+
+// Low QC (mean ~75 mg/dL): abs% = 6/75*100 = 8.0% = fixed% → TEa = 8.0%
+var sigmaLow = calc.Calculate(biasPct: 1.0, cvPct: 1.5, analyte: "glucose", qcMean: 75.0);
+Console.WriteLine($"Low QC σ = {sigmaLow.Sigma}, TEa = {sigmaLow.Tea}%");
+
+// High QC (mean ~250 mg/dL): abs% = 6/250*100 = 2.4% < 8% → TEa = 8.0%
+var sigmaHigh = calc.Calculate(biasPct: 1.0, cvPct: 1.5, analyte: "glucose", qcMean: 250.0);
+Console.WriteLine($"High QC σ = {sigmaHigh.Sigma}, TEa = {sigmaHigh.Tea}%");
+
+// Creatinine — ±10% or ±0.2 mg/dL (greater)
+// At low creatinine (0.5 mg/dL), absolute dominates: abs% = 0.2/0.5*100 = 40%
+var sigmaCr = calc.Calculate(biasPct: 2.0, cvPct: 3.0, analyte: "creatinine", qcMean: 0.5);
+Console.WriteLine($"Low creatinine TEa = {sigmaCr.Tea}%");  // 40% — not 10%
+```
+
+### Calculate sigma — absolute criterion
+
+```csharp
+// Potassium — ±0.3 mmol/L absolute (no fixed percentage component)
+// TEa% depends entirely on the QC concentration
+var sigmaK = calc.Calculate(biasPct: 0.2, cvPct: 0.8, analyte: "potassium", qcMean: 4.0);
+Console.WriteLine($"K TEa = {sigmaK.Tea}%");  // 7.5% (= 0.3/4.0*100)
+```
+
+### Calculate sigma — LDT analyte (user-supplied TEa)
+
+```csharp
+// Voriconazole — no CLIA PT criteria; use clinical decision limit-based TEa
 var sigmaVori = calc.Calculate(
     biasPct: 9.8,
     cvPct: 5.0,
     teaPct: 30.0,
     analyte: "voriconazole",
     teaSource: "Conservative clinical estimate (therapeutic range 0.5–4 mg/L)");
-
-Console.WriteLine($"σ = {sigmaVori.Sigma}"); // 4.04 → Three-rule set
+Console.WriteLine($"σ = {sigmaVori.Sigma}");   // 4.04 → Three-rule set
 ```
 
-### Generate Levey-Jennings chart data
+### Check CLIA criteria coverage
+
+```csharp
+// Check if an analyte has 2025 CLIA PT criteria
+SigmaCalculator.HasCliaCriteria("glucose");      // true
+SigmaCalculator.HasCliaCriteria("hba1c");        // true  (new in 2025)
+SigmaCalculator.HasCliaCriteria("bnp");          // true  (new in 2025)
+SigmaCalculator.HasCliaCriteria("vancomycin");   // true  (composite, tightened)
+SigmaCalculator.HasCliaCriteria("cyclosporine"); // false (no CLIA PT criteria — use teaPct)
+SigmaCalculator.HasCliaCriteria("ngal");         // false (no CLIA PT criteria — use teaPct)
+
+// Inspect the resolved criterion
+var criteria = SigmaCalculator.GetCriteria("tsh");
+Console.WriteLine(criteria!.Description);        // TV ±20% or ±0.2 mIU/L (greater)
+Console.WriteLine(criteria.Type);               // Composite
+Console.WriteLine(criteria.RequiresQcMean);     // True
+```
+
+### Exhaustive mode for audit trail
+
+```csharp
+var result = engine.Evaluate(observations, limits, EvaluationMode.Exhaustive);
+foreach (var v in result.AllViolations)
+    Console.WriteLine($"{v.RuleName}: {v.Description}");
+```
+
+### Levey-Jennings chart data
 
 ```csharp
 var builder = new LeveyJenningsBuilder();
 var chart = builder.Build(observations, limits);
 
-// Pass chart.Mean, chart.Plus2s, etc. to your chart rendering layer
 foreach (var point in chart.DataPoints)
-{
     Console.WriteLine($"[{point.Index}] {point.Value:F2} — " +
         (point.IsViolation ? $"VIOLATION: {point.ViolatingRuleName}" : "OK"));
-}
 ```
 
-### Exhaustive mode for audit trail documentation
+---
 
-```csharp
-// Returns all violations detected, not just the first rejection
-var result = engine.Evaluate(observations, limits, EvaluationMode.Exhaustive);
+## 2025 CLIA PT criteria — key changes from prior version
 
-foreach (var violation in result.AllViolations)
-{
-    Console.WriteLine($"{violation.RuleName}: {violation.Description}");
-}
-```
+| Analyte | Old | 2025 (Current) |
+|---|---|---|
+| Glucose | ±10% | ±8% or ±6 mg/dL (composite) |
+| Creatinine | ±15% | ±10% or ±0.2 mg/dL (composite) |
+| ALT / AST | ±20% | ±15% or ±6 U/L (composite) |
+| Albumin | ±10% | ±8% |
+| Total protein | ±10% | ±8% |
+| Triglycerides | ±25% | ±15% |
+| Alkaline phosphatase | ±30% | ±20% |
+| Magnesium | ±25% | ±15% |
+| HDL cholesterol | ±30% | ±20% or ±6 mg/dL (composite) |
+| TSH | ±3 SD | ±20% or ±0.2 mIU/L (composite) |
+| Phenytoin | ±25% | ±15% or ±2 mcg/mL (composite) |
+| Vancomycin | not regulated | ±15% or ±2 mcg/mL (composite) |
+| Lithium | ±20% | ±15% or ±0.3 mmol/L (composite) |
+| HbA1c | not regulated | ±8% (new) |
+| BNP / NT-proBNP | not regulated | ±30% (new) |
+| Hemoglobin | ±7% | ±4% |
+| WBC | ±15% | ±10% |
+| RBC / Hematocrit | ±6% | ±4% |
 
 ---
 
@@ -147,7 +221,7 @@ The engine is validated against 24 deterministic test scenarios covering all imp
 
 ```bash
 dotnet test
-# 35 tests — 24 Westgard scenarios + sigma calculator suite
+# 54 tests — 24 Westgard scenarios + sigma calculator suite
 ```
 
 The test file at `tests/ClinStrata.QC.Engine.Tests/WestgardValidationTests.cs` is the supplementary validation dataset referenced in the companion JALM technical note.
@@ -163,7 +237,7 @@ dotnet add package ClinStrata.QC.Engine
 Or clone directly:
 
 ```bash
-git clone https://github.com/farowolo/clinstrata-qc-engine
+git clone https://github.com/[PLACEHOLDER]/clinstrata-qc-engine
 ```
 
 Requires .NET 9.0+. No external runtime dependencies.
@@ -172,19 +246,21 @@ Requires .NET 9.0+. No external runtime dependencies.
 
 ## Limitations
 
-**No CUSUM or EWMA.** These methods provide superior detection of small persistent systematic errors and are planned for a future release. Westgard multi-rules can miss slow progressive shifts in method performance that CUSUM or EWMA would flag.
+**No CUSUM or EWMA.** These methods provide superior detection of small persistent systematic errors — the kind that accumulate slowly across runs and are invisible to Westgard multi-rules. Planned for a future release.
 
-**TEa defaults to CLIA PT criteria.** For LDTs and esoteric assays where CLIA PT criteria do not exist or are not clinically appropriate, always specify a custom TEa. This is especially important for LC-MS/MS-based therapeutic drug monitoring analytes such as antifungals and immunosuppressants.
+**Composite and absolute TEa criteria require qcMean.** For analytes with concentration-dependent CLIA criteria (glucose, creatinine, TSH, vancomycin, etc.), always pass the QC material mean. Without it, the engine returns the fixed percentage component only, which may underestimate TEa at low concentrations and overestimate sigma.
 
-**Stateless by design.** The engine evaluates discrete observation windows and does not maintain running statistics between calls. Accumulation of inter-run trending data is the responsibility of the consuming informatics system.
+**TEa is not automatically appropriate for all analytes.** CLIA PT criteria are regulatory acceptance limits, not necessarily optimal analytical quality specifications. For LDTs and esoteric assays — and especially for analytes at clinical decision thresholds — consider whether biological variation-derived or clinical decision limit-based TEa is more appropriate than the CLIA default.
 
-**Clinical judgment is always required.** Sigma-based rule selection is evidence-based guidance, not a prescriptive mandate. QC plan finalization requires a qualified laboratory professional to assess the clinical and analytical context.
+**Stateless by design.** The engine evaluates discrete observation windows and does not maintain running statistics between calls. Inter-run trending is the responsibility of the consuming informatics system.
+
+**Clinical judgment is always required.** Sigma-based rule selection is evidence-based guidance, not a prescriptive mandate. QC plan finalization requires a qualified laboratory professional.
 
 ---
 
 ## How this relates to Bio-Rad Unity
 
-Bio-Rad Unity is the most widely deployed QC management platform in clinical laboratories and provides valuable interlaboratory peer comparison. ClinStrata QC Engine is not a replacement for Unity — it is architecturally different. Unity is a hosted service with proprietary rule logic and a peer group model built around commercial reagent lots. ClinStrata is an open-source computational library you embed in your own informatics system, with fully auditable rule logic, configurable TEa, and no dependency on a peer population. For LC-MS/MS LDTs where no peer group exists and rule logic must be transparent and independently verifiable, ClinStrata fills a gap that Unity's architecture does not address.
+Bio-Rad Unity is the most widely deployed QC management platform in clinical laboratories and provides valuable interlaboratory peer comparison. ClinStrata QC Engine is not a replacement for Unity — it is architecturally different. Unity is a hosted service with proprietary rule logic and a peer group model built around commercial reagent lots. ClinStrata is an open-source computational library you embed in your own informatics system, with fully auditable rule logic, 2025 CLIA-aligned TEa, and no dependency on a peer population. For LC-MS/MS LDTs where no peer group exists and rule logic must be transparent and independently verifiable, ClinStrata fills a gap that Unity's architecture does not address.
 
 ---
 
