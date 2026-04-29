@@ -7,7 +7,7 @@
     <AssemblyName>ClinStrata.QC.Engine</AssemblyName>
     <RootNamespace>ClinStrata.QC.Engine</RootNamespace>
     <Version>1.0.0</Version>
-    <Authors>Jimmy O. Folagbayi</Authors>
+    <Authors>Folagbayi K. Arowolo</Authors>
     <Description>Open-source, CLSI EP23-aligned Westgard multi-rule QC engine and sigma metric calculator for clinical laboratory informatics.</Description>
     <PackageTags>clinical-laboratory;quality-control;westgard;clsi;ep23;sigma-metrics;lims;clinstrata</PackageTags>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>

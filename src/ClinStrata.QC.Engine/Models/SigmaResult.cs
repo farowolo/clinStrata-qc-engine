@@ -19,8 +19,11 @@ public record SigmaResult
     public required double Cv       { get; init; }
     public required double Sigma    { get; init; }
     public required SigmaRuleRecommendation Recommendation { get; init; }
-    public string? TeaSource  { get; init; }
-    public string? Analyte    { get; init; }
+    public string?          TeaSource  { get; init; }
+    public string?          Analyte    { get; init; }
+
+    /// <summary>The resolved 2025 CLIA criteria, if applicable. Null for user-supplied TEa.</summary>
+    public CliaTeaCriteria? Criteria   { get; init; }
 
     public string RecommendationDescription => Recommendation switch
     {

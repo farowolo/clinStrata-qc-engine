@@ -163,7 +163,7 @@ dotnet add package ClinStrata.QC.Engine
 Or clone directly:
 
 ```bash
-git clone https://github.com/farowolo/clinstrata-qc-engine
+git clone https://github.com/[PLACEHOLDER]/clinstrata-qc-engine
 ```
 
 Requires .NET 9.0+. No external runtime dependencies.

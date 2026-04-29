@@ -41,7 +41,7 @@ public sealed class WestgardEngine
             throw new ArgumentException(
                 "At least one observation is required.", nameof(observations));
 
-        // Step 1: 1-2s warning check — sets flag but does NOT gate rejection evaluation
+        // Step 1: 1-2s warning — sets flag but does NOT gate rejection evaluation
         var warning = _rule1_2s.Evaluate(observations, limits);
         bool warningTriggered = warning is not null;
 
@@ -71,7 +71,6 @@ public sealed class WestgardEngine
             primary ??= v;
         }
 
-        // No rejection rule fired — include warning in violation list if present
         bool hasRejection = allViolations.Any(v => v.IsRejection);
         if (warning is not null && !allViolations.Contains(warning))
             allViolations.Insert(0, warning);
