@@ -192,7 +192,7 @@ Bio-Rad Unity is the most widely deployed QC management platform in clinical lab
 
 If you use this engine in published work, please cite:
 
-> Folagbayi JO. An open-source, CLSI EP23-aligned statistical quality control engine for clinical laboratory informatics: design, implementation, and validation. *Journal of Applied Laboratory Medicine*. [In submission, 2026].
+> Arowolo FK. An open-source, CLSI EP23-aligned statistical quality control engine for clinical laboratory informatics: design, implementation, and validation. *Journal of Applied Laboratory Medicine*. [In submission, 2026].
 
 ---
 
